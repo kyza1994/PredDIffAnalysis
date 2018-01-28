@@ -3,55 +3,77 @@
 Some utility functions for visualisation, not documented properly
 """
 
-from skimage import color
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-import pylab
+import math
 
 
-def plot_results(x_test, x_test_im, predDiff, tarFunc, classnames, save_path):
+def plot_map(x_test_im, predDiff, class_indx, classnames=None, save_path=None):
     '''
     Plot the results of the relevance estimation
     '''
     imsize = x_test_im.shape
 
-
-    tarIdx = np.argmax(tarFunc(x_test)[0][0].data.numpy())
-    tarClass = classnames[tarIdx]
+    tarClass = None
+    if classnames is not None and class_indx is not None:
+        tarClass = classnames[class_indx]
     
     plt.figure()
     plt.subplot(1, 3, 1)
     plt.imshow(x_test_im, cmap='gray')
     plt.title('original')
-    #frame = pylab.gca()
-    #frame.axes.get_xaxis().set_ticks([])
-    #frame.axes.get_yaxis().set_ticks([])
 
     plt.subplot(1, 3, 2)
-    p = predDiff.reshape((imsize[0], imsize[1],-1))[:, :, tarIdx]
+    p = predDiff.reshape((imsize[0], imsize[1], -1))[:, :, class_indx]
     plt.imshow(p, cmap=cm.seismic, vmin=-np.max(np.abs(p)), vmax=np.max(np.abs(p)), interpolation='nearest')
-    #plt.colorbar()
-    #plt.imshow(np.abs(p), cmap=cm.Greys_r)
     plt.title('weight of evidence')
-    #frame = pylab.gca()
-    #frame.axes.get_xaxis().set_ticks([])
-    #frame.axes.get_yaxis().set_ticks([])
+
 
     plt.subplot(1, 3, 3)
-    plt.title('class: {}'.format(tarClass))
+    if tarClass is not None:
+        plt.title('class: {}'.format(tarClass))
     plt.imshow(x_test_im, cmap='gray', )
     plt.imshow(p, cmap=cm.seismic, vmin=-np.max(np.abs(p)), vmax=np.max(np.abs(p)), interpolation='nearest', alpha=0.5)
-    #plt.title('class entropy')
-    #frame = pylab.gca()
-    #frame.axes.get_xaxis().set_ticks([])
-    #frame.axes.get_yaxis().set_ticks([])
-    
+
     fig = plt.gcf()
     fig.set_size_inches(np.array([8,8]), forward=True)
     plt.tight_layout()
     plt.tight_layout()
     plt.tight_layout()
     plt.show()
-    #plt.savefig(save_path)
-    #plt.close()
+
+
+    if save_path is not None:
+        plt.savefig(save_path)
+
+
+def plot_all_maps(x_test_im, predDiff, classnames=None,  save_path=None):
+
+    imsize = x_test_im.shape
+    prd = predDiff.reshape((imsize[0], imsize[1], -1))
+
+    ncols = 3
+    nrows = math.ceil((len(classnames) + 1) / ncols)
+
+    fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=(10, 15))
+
+    plt.subplot(nrows, ncols, 1)
+    plt.title('original')
+    plt.imshow(x_test_im, cmap='gray')
+
+    for i in range(1, 6):
+        plt.subplot(nrows, ncols, 2 * i)
+        if classnames is not None:
+            plt.title('class {}'.format(classnames[2 * i - 2]))
+        p = prd[:, :, 2 * (i - 1)]
+        plt.imshow(p, cmap=cm.seismic, vmin=-np.max(np.abs(p)), vmax=np.max(np.abs(p)), interpolation='nearest')
+
+        plt.subplot(nrows, ncols, 2 * i + 1)
+        if classnames is not None:
+            plt.title('class {}'.format(classnames[2 * i - 1]))
+        p = prd[:, :, 2 * (i - 1) + 1]
+        plt.imshow(p, cmap=cm.seismic, vmin=-np.max(np.abs(p)), vmax=np.max(np.abs(p)), interpolation='nearest')
+
+    if save_path is not None:
+        plt.savefig(save_path)

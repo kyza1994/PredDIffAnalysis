@@ -12,7 +12,7 @@ from torchvision import transforms
 
 def get_data(path_data, transformation=None):
     """
-    Returns a small dataset of ImageNet data.
+    Returns a small dataset of  data.
     Input:
             path_data         path to data
             transformation    transformation to apply

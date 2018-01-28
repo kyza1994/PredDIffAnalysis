@@ -18,7 +18,7 @@ class marg_sampler:
     Marginal sampler for image patches
     '''
     
-    def __init__(self, X, net):
+    def __init__(self, X):
         ''' 
         Sampler to draw marginal samples 
         Input:  
@@ -26,7 +26,7 @@ class marg_sampler:
                         for the feature values
         '''
         # we will use raveled arrays for each image
-        self.X = np.array([img[0][0].numpy() for img in X])
+        self.X = X
         self.X = self.X.reshape(self.X.shape[0], -1)
 
     def get_samples(self, sampleIndices, featVect=None, numSamples=10):
@@ -70,7 +70,7 @@ class cond_sampler:
         self.padding_size = padding_size
         self.image_dims = image_dims
         self.num_samples_fit = num_samples_fit
-        self.X = np.array([img[0][0].numpy() for img in X])
+        self.X = X
         self.netname = netname
         #self.X = self.X.reshape(self.X.shape[0], -1)
 

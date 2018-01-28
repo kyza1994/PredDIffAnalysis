@@ -39,10 +39,7 @@ class PredDiffAnalyser:
         self.num_feats = len(self.x.ravel())  
         self.true_tar_val = self.tar_func(self.x_for_net)[0]  # true network state for the given input
         self.true_tar_val = [self.tar_func(self.x_for_net)[i].data.numpy()[0] for i in range(len(self.true_tar_val))]
-        self.num_blobs = len(self.true_tar_val)  
-        self.num_metrics = 2                    # the number of metrics we use for evaluating
-                                                # the prediction difference (avg and max of 
-                                                # the weight of evidence per feature map)
+        self.num_blobs = len(self.true_tar_val)
         self.tests_per_batch = int(self.batch_size/self.num_samples) # rounds down      
         
         # drop the first dimension of the elements in the true target value list,
@@ -95,7 +92,7 @@ class PredDiffAnalyser:
                                 rel_vects[b][window[window < self.num_feats]] += pred_diffs[b][w]
                             counts[window[window < self.num_feats]] += 1
                         win_idx = 0
-                print("row {}/{} took: --- {:.4f} seconds --- ".format(i, self.x.shape[1]-win_size+1, (time.time() - start_time)))
+                #print("row {}/{} took: --- {:.4f} seconds --- ".format(i, self.x.shape[1]-win_size+1, (time.time() - start_time)))
                 
             # evaluate the rest that didn't fill last batch
             pred_diffs = self._get_rel_vect_subset(windows[:win_idx+1])
