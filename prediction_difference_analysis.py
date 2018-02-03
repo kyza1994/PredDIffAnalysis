@@ -17,7 +17,7 @@ class PredDiffAnalyser:
         '''
         Input:  
             x           the feature vector for which we want to make the analysis (can be a hidden layer!)
-                        Has to be numpy array of the dimension that fits to targetFunc
+                        Has to be numpy array
             tar_func    the target function, can be the output of classifier or intermediate layer
                         (must take x as input, keep this in mind when starting at intermediate layers!)
             num_samples the number of samples used for marginalising out features
@@ -27,8 +27,7 @@ class PredDiffAnalyser:
         '''
         
         # inputs
-        self.x = x.numpy()[0][0]
-        self.x_for_net = x
+        self.x = x
         self.tar_func = tar_func
         self.sampler = sampler
         self.num_samples = num_samples
@@ -37,8 +36,8 @@ class PredDiffAnalyser:
         
         # some other useful values
         self.num_feats = len(self.x.ravel())  
-        self.true_tar_val = self.tar_func(self.x_for_net)[0]  # true network state for the given input
-        self.true_tar_val = [self.tar_func(self.x_for_net)[i].data.numpy()[0] for i in range(len(self.true_tar_val))]
+        self.true_tar_val = self.tar_func(self.x)[0] # true network state for the given input
+        self.true_tar_val = [self.tar_func(self.x)[i][0] for i in range(len(self.true_tar_val))]
         self.num_blobs = len(self.true_tar_val)
         self.tests_per_batch = int(self.batch_size/self.num_samples) # rounds down      
         
@@ -170,8 +169,8 @@ class PredDiffAnalyser:
         # get prediction for the altered x-values
         x_new = x_new.reshape((self.tests_per_batch*self.num_samples, 1, self.x.shape[0], self.x.shape[1]))
 
-        tarVals = self.tar_func(torch.from_numpy(x_new).float())
-        tarVals = [tarVals[i].data.numpy() for i in range(len(tarVals))]
+        tarVals = self.tar_func(x_new)
+        tarVals = [tarVals[i] for i in range(len(tarVals))]
 
         for b in range(self.num_blobs):
             tarVals[b] = tarVals[b].reshape((self.tests_per_batch, self.num_samples, -1))

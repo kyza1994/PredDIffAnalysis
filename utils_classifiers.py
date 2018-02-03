@@ -8,22 +8,28 @@ Utility methods for handling the classifiers:
 
 """
 
-
-import torch
-from torch.autograd import Variable
-import torch.nn as nn
-
-
-def set_torch_mode(net, gpu):
+def set_mode(net, gpu, lib='keras'):
     ''' Set whether torch runs in gpu or not'''
-    if gpu:
+    if gpu and lib == 'torch':
         net.cuda()
+    else:
+        pass
         
      
-def get_net(netpath):
+def get_net(netpath, lib='keras'):
 
     try:
-        net = torch.load(netpath)
+        if lib == 'torch':
+            import torch
+            net = torch.load(netpath)
+
+        elif lib == 'keras':
+            from keras.models import load_model
+            net = load_model(netpath)
+
+        else:
+            print('Not supported lib')
+
     except FileNotFoundError:
         print('Can not load model')
         return None
@@ -31,7 +37,7 @@ def get_net(netpath):
      
 
 
-def forward_pass(net, x, layer_numbers=[-1], gpu=False):
+def forward_pass(net, x, layer_numbers=[-1], gpu=False, lib='keras'):
     ''' 
     Defines a forward pass (modified for our needs) 
     Input:      net            the network
@@ -42,15 +48,52 @@ def forward_pass(net, x, layer_numbers=[-1], gpu=False):
     '''
         
     # feed forward the batch through the next
-    net.eval()
-    if gpu:
-        x = x.cuda()
-    x = Variable(x, volatile=True)
+    if lib == 'torch':
 
-    if len(layer_numbers) == 1 and layer_numbers[0] == -1:
-        returnVals = [net(x)]
+        from torch.autograd import Variable
+        import torch.nn as nn
+        from torch import from_numpy
+
+        if len(x.shape) == 2:
+            x = from_numpy(x.reshape(1, 1, x.shape[0], x.shape[1])).float()
+        else:
+            x = from_numpy(x).float()
+
+        net.eval()
+        if gpu:
+            x = x.cuda()
+        x = Variable(x, volatile=True)
+
+        if len(layer_numbers) == 1 and layer_numbers[0] == -1:
+            returnVals = [net(x).data.numpy()]
+            #print(returnVals[0].shape)
+        else:
+            returnVals = [nn.Sequential(*list(net.children())[:i+1])(x).data.numpy() for i in layer_numbers]
+
+    elif lib == 'keras':
+
+        from keras.models import Sequential
+        from keras import backend as K
+
+        if len(x.shape) == 2:
+            if K.image_data_format() == 'channels_first':
+                x = x.reshape(1, 1, x.shape[0], x.shape[1])
+            else:
+                x = x.reshape(1, x.shape[0], x.shape[1], 1)
+        else:
+            if K.image_data_format() == 'channels_first':
+                pass
+            else:
+                x = x.reshape(x.shape[0], x.shape[2], x.shape[3], x.shape[1])
+
+
+        if len(layer_numbers) == 1 and layer_numbers[0] == -1:
+            returnVals = [net.predict(x)]
+        else:
+            returnVals = [Sequential(net.layers[:i+1]).predict(x) for i in layer_numbers]
+
     else:
-        returnVals = [nn.Sequential(*list(net.children())[:i+1])(x) for i in layer_numbers]
+        print('Not supported lib')
     
     return returnVals
 

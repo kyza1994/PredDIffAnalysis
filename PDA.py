@@ -7,9 +7,9 @@ import utils_visualise as utlV
 
 
 class PDA:
-    def __init__(self, netname, net, samplerData, classnames=None, layer_numbers=[-1], win_size=5,
+    def __init__(self, netname, net, samplerData, classnames=None, win_size=5,
                  padding_size=3, gpu=False, batch_size=32, overlapping=True, sample_style='conditional',
-                 num_samples=10):
+                 num_samples=10, layer_numbers=[-1], lib='keras'):
 
         self.netname = netname
         self.net = net
@@ -25,10 +25,11 @@ class PDA:
         self.sampler = None
         self.image_dims = samplerData[0].shape
         self.pda = None
+        self.lib = lib
 
-        utlC.set_torch_mode(self.net, gpu=self.gpu)
+        utlC.set_mode(self.net, gpu=self.gpu, lib=self.lib)
         # target function (mapping input features to output probabilities)
-        self.target_func = lambda x: utlC.forward_pass(self.net, x, self.layer_numbers, self.gpu)
+        self.target_func = lambda x: utlC.forward_pass(self.net, x, self.layer_numbers, self.gpu, self.lib)
 
         if sample_style == 'conditional':
             self.sampler = utlS.cond_sampler(X=self.samplerData, win_size=self.win_size,
