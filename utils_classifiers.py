@@ -37,7 +37,7 @@ def get_net(netpath, lib='keras'):
      
 
 
-def forward_pass(net, x, layer_numbers=[-1], gpu=False, lib='keras'):
+def forward_pass(net, x, layer_numbers=[-1], gpu=False, lib='keras', n_channels=1):
     ''' 
     Defines a forward pass (modified for our needs) 
     Input:      net            the network
@@ -54,8 +54,8 @@ def forward_pass(net, x, layer_numbers=[-1], gpu=False, lib='keras'):
         import torch.nn as nn
         from torch import from_numpy
 
-        if len(x.shape) == 2:
-            x = from_numpy(x.reshape(1, 1, x.shape[0], x.shape[1])).float()
+        if len(x.shape) != 4:
+            x = from_numpy(x.reshape(1, n_channels, x.shape[x.ndim - 2], x.shape[x.ndim - 1])).float()
         else:
             x = from_numpy(x).float()
 
@@ -75,11 +75,11 @@ def forward_pass(net, x, layer_numbers=[-1], gpu=False, lib='keras'):
         from keras.models import Sequential
         from keras import backend as K
 
-        if len(x.shape) == 2:
+        if len(x.shape) != 4:
             if K.image_data_format() == 'channels_first':
-                x = x.reshape(1, 1, x.shape[0], x.shape[1])
+                x = x.reshape(1, n_channels, x.shape[x.ndim - 2], x.shape[x.ndim - 1])
             else:
-                x = x.reshape(1, x.shape[0], x.shape[1], 1)
+                x = x.reshape(1, x.shape[x.ndim - 2], x.shape[x.ndim - 1], n_channels)
         else:
             if K.image_data_format() == 'channels_first':
                 pass

@@ -23,18 +23,31 @@ class PDA:
         self.overlapping = overlapping
         self.num_samples = num_samples
         self.sampler = None
-        self.image_dims = samplerData[0].shape
+        self.image_dims = samplerData[0].shape[-2:]
         self.pda = None
         self.lib = lib
 
+        if samplerData[0].ndim == 2:
+            self.n_channels = 1
+        elif samplerData[0].ndim == 3 and samplerData[0].shape[0] == 3:
+            self.n_channels = 3
+        else:
+            raise ValueError('Bad input shape')
+
         utlC.set_mode(self.net, gpu=self.gpu, lib=self.lib)
         # target function (mapping input features to output probabilities)
-        self.target_func = lambda x: utlC.forward_pass(self.net, x, self.layer_numbers, self.gpu, self.lib)
+        self.target_func = lambda x: utlC.forward_pass(self.net, x, self.layer_numbers, self.gpu, self.lib,
+                                                       self.n_channels)
 
         if sample_style == 'conditional':
-            self.sampler = utlS.cond_sampler(X=self.samplerData, win_size=self.win_size,
-                                             padding_size=self.padding_size, image_dims=self.image_dims,
-                                             netname=self.netname)
+            if self.n_channels == 1:
+                self.sampler = utlS.cond_sampler(X=self.samplerData, win_size=self.win_size,
+                                                padding_size=self.padding_size, image_dims=self.image_dims,
+                                                netname=self.netname)
+            else:
+                self.sampler = utlS.cond_sampler_3d(X=self.samplerData, win_size=self.win_size,
+                                                 padding_size=self.padding_size, image_dims=self.image_dims,
+                                                 netname=self.netname)
         elif sample_style == 'marginal':
             self.sampler = utlS.marg_sampler(self.samplerData)
 
@@ -47,7 +60,7 @@ class PDA:
         """
 
         pda = PredDiffAnalyser(x, self.target_func, self.sampler, num_samples=self.num_samples,
-                               batch_size=self.batch_size)
+                               batch_size=self.batch_size, n_channels=self.n_channels)
         pred_diffs = pda.get_rel_vect(win_size=self.win_size, overlap=self.overlapping)
         return pred_diffs
 

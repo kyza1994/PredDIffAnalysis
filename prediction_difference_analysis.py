@@ -12,7 +12,7 @@ class PredDiffAnalyser:
     input and reflects the importance of each feature.
     '''
         
-    def __init__(self, x, tar_func, sampler, num_samples=10, batch_size=10, prob_tar=True):
+    def __init__(self, x, tar_func, sampler, num_samples=10, batch_size=10, prob_tar=True, n_channels=1):
         '''
         Input:  
             x           the feature vector for which we want to make the analysis (can be a hidden layer!)
@@ -32,22 +32,20 @@ class PredDiffAnalyser:
         self.num_samples = num_samples
         self.batch_size = batch_size
         self.prob_tar = prob_tar
+        self.n_channels = n_channels
         
         # some other useful values
-        self.num_feats = len(self.x.ravel())  
+        self.num_feats = int(len(self.x.ravel()) / self.n_channels)
         self.true_tar_val = self.tar_func(self.x)[0] # true network state for the given input
         self.true_tar_val = [self.tar_func(self.x)[i][0] for i in range(len(self.true_tar_val))]
         self.num_blobs = len(self.true_tar_val)
         self.tests_per_batch = int(self.batch_size/self.num_samples) # rounds down      
-        
-        # drop the first dimension of the elements in the true target value list,
-        # since it is not necessary (since we only forwarded a single feature vector)
-        # self.true_tar_val = [t[0] for t in self.true_tar_val]
-        
- 
+
+
 #%%
 # -------------------- METHOD RETURNING EXPLANATIONS --------------------------  
         
+
     def get_rel_vect(self, win_size, overlap=True):
         """
         Main method to use, will return a relevance vector.
@@ -68,17 +66,20 @@ class PredDiffAnalyser:
         counts = np.zeros(self.num_feats, dtype=np.int)
 
         # a matrix where each entry reflects the index in the flattened input (image)
-        all_feats = np.reshape([i for i in range(self.num_feats)], self.x.shape)
+        all_feats = np.reshape([i for i in range(self.num_feats*self.n_channels)], self.x.shape)
         
         if overlap:
             
-            windows = np.zeros((self.tests_per_batch, win_size * win_size), dtype=int)
+            windows = np.zeros((self.tests_per_batch, win_size * win_size * self.n_channels), dtype=int)
             win_idx = 0
-            for i in range(self.x.shape[0] - win_size + 1): # rows
-                start_time = time.time()
-                for j in range(self.x.shape[1] - win_size + 1): # columns
+            for i in range(self.x.shape[self.x.ndim - 2] - win_size + 1): # rows
+
+                for j in range(self.x.shape[self.x.ndim - 1] - win_size + 1): # columns
                     # get the window which we want to simulate as unknown
-                    window = all_feats[i:i+win_size, j:j+win_size].ravel()
+                    if self.n_channels == 1:
+                        window = all_feats[i:i+win_size, j:j+win_size].ravel()
+                    else:
+                        window = all_feats[:, i:i + win_size, j:j + win_size].ravel()
                     windows[win_idx] = window
                     win_idx += 1
                     if win_idx == self.tests_per_batch:
@@ -90,7 +91,6 @@ class PredDiffAnalyser:
                                 rel_vects[b][window[window < self.num_feats]] += pred_diffs[b][w]
                             counts[window[window < self.num_feats]] += 1
                         win_idx = 0
-                #print("row {}/{} took: --- {:.4f} seconds --- ".format(i, self.x.shape[1]-win_size+1, (time.time() - start_time)))
                 
             # evaluate the rest that didn't fill last batch
             pred_diffs = self._get_rel_vect_subset(windows[:win_idx+1])
@@ -102,13 +102,16 @@ class PredDiffAnalyser:
                 
         else: 
             
-            windows = np.zeros((self.tests_per_batch, win_size*win_size*3), dtype=int)
+            windows = np.zeros((self.tests_per_batch, win_size*win_size*self.n_channels), dtype=int)
             win_idx = 0
-            for i in range(self.x.shape[0]/win_size): # rows
-                start_time = time.time()
-                for j in range(self.x.shape[1]/win_size): # columns
+            for i in range(self.x.shape[self.x.ndim - 2]/win_size): # rows
+                for j in range(self.x.shape[self.x.ndim - 1]/win_size): # columns
                     # get the window which we want to simulate as unknown
-                    window = all_feats[i*win_size:i*win_size+win_size, j*win_size:j*win_size+win_size].ravel()
+                    if self.n_channels == 1:
+                        window = all_feats[i*win_size:i*win_size+win_size, j*win_size:j*win_size+win_size].ravel()
+                    else:
+                        window = all_feats[:, i * win_size:i * win_size + win_size,
+                                 j * win_size:j * win_size + win_size].ravel()
                     windows[win_idx] = window
                     win_idx += 1
                     if win_idx == self.tests_per_batch:
@@ -120,7 +123,7 @@ class PredDiffAnalyser:
                                 rel_vects[b][window[window < self.num_feats]] += pred_diffs[b][w]
                             counts[window[window < self.num_feats]] += 1
                         win_idx = 0
-                print ("row {}/{} took: --- {:.4f} seconds --- ".format(i, self.x.shape[1]/win_size-1, (time.time() - start_time)))
+
                 
             # evaluate the rest that didn't fill last batch
             pred_diffs = self._get_rel_vect_subset(windows[:win_idx+1])
@@ -166,7 +169,8 @@ class PredDiffAnalyser:
             x_new[f, :, feature_sets[f].ravel()] = self.sampler.get_samples(feature_sets[f], self.x, self.num_samples).T
             
         # get prediction for the altered x-values
-        x_new = x_new.reshape((self.tests_per_batch*self.num_samples, 1, self.x.shape[0], self.x.shape[1]))
+        x_new = x_new.reshape((self.tests_per_batch*self.num_samples, self.n_channels,
+                               self.x.shape[self.x.ndim - 2], self.x.shape[self.x.ndim - 1]))
 
         tarVals = self.tar_func(x_new)
         tarVals = [tarVals[i] for i in range(len(tarVals))]
