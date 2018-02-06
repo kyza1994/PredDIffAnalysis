@@ -51,7 +51,7 @@ class cond_sampler:
     using a multivariate Gaussian distribution
     '''
     
-    def __init__(self, X, win_size, padding_size, image_dims, netname, num_samples_fit=20000):
+    def __init__(self, X, win_size, padding_size, image_dims, netname, path_to_params, num_samples_fit=20000):
         '''
         Sampler to conditionally sample pixel patches using a gaussian model
         Input: 
@@ -74,7 +74,11 @@ class cond_sampler:
         self.netname = netname
         #self.X = self.X.reshape(self.X.shape[0], -1)
 
-        self.path_folder = './gaussians/'
+        if path_to_params is None:
+            self.path_folder = './gaussians/'
+        else:
+            self.path_folder = path_to_params
+
         if not os.path.exists(self.path_folder):
             os.makedirs(self.path_folder)      
         
@@ -85,7 +89,7 @@ class cond_sampler:
         
         # the min/max values for the features seen in the data, so that we can cut off overfloating values
         if not os.path.exists(self.path_folder+'{}_minMaxVals.npy'.format(self.netname)):
-            save_minmax_values(self.netname, self.X)
+            save_minmax_values(self.netname, self.X, 1, self.path_folder)
         self.minMaxVals = np.load(self.path_folder+'{}_minMaxVals.npy'.format(self.netname))
         
         self.location = None
@@ -309,13 +313,13 @@ class cond_sampler:
         return samples
 
 
-class cond_sampler_3d:
+class cond_sampler_nch:
     '''
     Conditional sampler for image patches
     using a multivariate Gaussian distribution
     '''
 
-    def __init__(self, X, win_size, padding_size, image_dims, netname, num_samples_fit=20000):
+    def __init__(self, X, win_size, padding_size, image_dims, netname, n_channels, path_to_params, num_samples_fit=20000):
         '''
         Sampler to conditionally sample pixel patches using a gaussian model
         Input:
@@ -336,9 +340,14 @@ class cond_sampler_3d:
         self.num_samples_fit = num_samples_fit
         self.X = X
         self.netname = netname
+        self.n_channels = n_channels
         # self.X = self.X.reshape(self.X.shape[0], -1)
 
-        self.path_folder = './gaussians/'
+        if path_to_params is None:
+            self.path_folder = './gaussians/'
+        else:
+            self.path_folder = path_to_params
+
         if not os.path.exists(self.path_folder):
             os.makedirs(self.path_folder)
 
@@ -348,9 +357,9 @@ class cond_sampler_3d:
         self.meanVects, self.covMats = self._get_gauss_params()
 
         # the min/max values for the features seen in the data, so that we can cut off overfloating values
-        if not os.path.exists(self.path_folder + '{}_minMaxVals_3d.npy'.format(self.netname)):
-            save_minmax_values(self.netname, self.X, 3)
-        self.minMaxVals = np.load(self.path_folder + '{}_minMaxVals_3d.npy'.format(self.netname))
+        if not os.path.exists(self.path_folder + '{}_minMaxVals_{}ch.npy'.format(self.netname, self.n_channels)):
+            save_minmax_values(self.netname, self.X, self.n_channels, self.path_folder)
+        self.minMaxVals = np.load(self.path_folder + '{}_minMaxVals_{}ch.npy'.format(self.netname, self.n_channels))
 
         self.location = None
         self.dotProdForMean = None
@@ -362,11 +371,11 @@ class cond_sampler_3d:
         patch (i.e., window to sample plus padding around it)
         '''
 
-        means = np.zeros((3, self.patchSize * self.patchSize))
-        covs = np.zeros((3, self.patchSize * self.patchSize, self.patchSize * self.patchSize))
+        means = np.zeros((self.n_channels, self.patchSize * self.patchSize))
+        covs = np.zeros((self.n_channels, self.patchSize * self.patchSize, self.patchSize * self.patchSize))
 
-        path_mean = self.path_folder + '{}_means{}_indep_3d'.format(self.netname, self.patchSize)
-        path_cov = self.path_folder + '{}_covs{}_indep_3d'.format(self.netname, self.patchSize)
+        path_mean = self.path_folder + '{}_means{}_indep_{}ch'.format(self.netname, self.patchSize, self.n_channels)
+        path_cov = self.path_folder + '{}_covs{}_indep_{}ch'.format(self.netname, self.patchSize, self.n_channels)
 
         # check if  values are already precomputed and saved; otherwise do so first
         if os.path.exists(path_mean + '.npy') and os.path.exists(path_cov + '.npy'):
@@ -376,10 +385,10 @@ class cond_sampler_3d:
 
         else:
 
-            for c in [0, 1, 2]:
+            for c in range(self.n_channels):
                 # get samples for fitting the distribution
                 patchesMat = np.empty((0, self.patchSize * self.patchSize), dtype=np.float)
-                for i in range(int(self.num_samples_fit / X.shape[0]) + 1):
+                for i in range(int(self.num_samples_fit / self.X.shape[0]) + 1):
                     # get a random (upper left) position of the patch
                     idx = [random.randint(0, self.image_dims[0] - self.patchSize),
                            random.randint(0, self.image_dims[1] - self.patchSize)]
@@ -415,11 +424,12 @@ class cond_sampler_3d:
         mu1 = np.take(self.meanVects[channel], inPatchIdx)
         mu2 = np.delete(self.meanVects[channel], inPatchIdx)
 
-        path_dotProdForMean = self.path_folder + '{}_cov{}_win{}_dotProdForMean_{}_{}_3d'.format(self.netname,
+        path_dotProdForMean = self.path_folder + '{}_cov{}_win{}_dotProdForMean_{}_{}_{}ch'.format(self.netname,
                                                                                                  self.patchSize,
                                                                                                  self.win_size,
                                                                                                  inPatchIdx[0],
-                                                                                                 inPatchIdx[-1])
+                                                                                                 inPatchIdx[-1],
+                                                                                                 self.n_channels)
 
         # get the dot product for the mean (check if precomputed, otherwise do this first)
         if not os.path.exists(path_dotProdForMean + '.npy'):
@@ -437,9 +447,10 @@ class cond_sampler_3d:
         # with the dotproduct, we can now evaluate the conditional mean
         cond_mean = mu1 + np.dot(dotProdForMean, x2 - mu2)
 
-        path_condCov = self.path_folder + '{}_cov{}_win{}_cond_cov_{}_{}_indep_3d'.format(self.netname, self.patchSize,
+        path_condCov = self.path_folder + '{}_cov{}_win{}_cond_cov_{}_{}_indep_{}ch'.format(self.netname, self.patchSize,
                                                                                           self.win_size, inPatchIdx[0],
-                                                                                          inPatchIdx[-1])
+                                                                                          inPatchIdx[-1],
+                                                                                          self.n_channels)
 
         # get the conditional covariance
         if not os.path.exists(path_condCov + '.npy'):
@@ -466,12 +477,11 @@ class cond_sampler_3d:
         height = self.image_dims[0]
         width = self.image_dims[1]
         # get the 2d values of the sample indices (since we sample from all color at once channels anyway)
-        subset3d = np.unravel_index(sampleIndices.ravel(), [3, self.image_dims[0], self.image_dims[1]])
+        subset3d = np.unravel_index(sampleIndices.ravel(), [self.n_channels, self.image_dims[0], self.image_dims[1]])
         subset2d = [subset3d[1], subset3d[2]]
         # we will need this to find the index of the sample inside the surrounding patch
-        inPatchIdx = np.tile(np.array([i for i in range(self.patchSize * self.patchSize)]), 3).reshape(3,
-                                                                                                        self.patchSize,
-                                                                                                        self.patchSize)
+        inPatchIdx = np.tile(np.array([i for i in range(self.patchSize * self.patchSize)]), self.n_channels).reshape(
+            self.n_channels, self.patchSize, self.patchSize)
         # indices of the subset relative to the whole feature map x
         upperIdx = subset2d[0][0]
         lowerIdx = subset2d[0][-1]
@@ -539,9 +549,9 @@ class cond_sampler_3d:
 
         # reshape inputs if necessary
         if np.ndim(sampleIndices) == 1:
-            sampleIndices = sampleIndices.reshape(3, self.win_size, self.win_size)
+            sampleIndices = sampleIndices.reshape(self.n_channels, self.win_size, self.win_size)
         if np.ndim(featVect) == 1:
-            featVect = featVect.reshape([3, self.image_dims[0], self.image_dims[1]])
+            featVect = featVect.reshape([self.n_channels, self.image_dims[0], self.image_dims[1]])
 
         # get a patch surrounding the sample indices and the indices relative to that
         patch, patchIndices = self._get_surr_patch(featVect, sampleIndices)
@@ -549,9 +559,9 @@ class cond_sampler_3d:
         # For each color channel, we will conditionally sample pixel
         # values from a multivariate distribution
 
-        samples = np.zeros((numSamples, 3, self.win_size * self.win_size))
+        samples = np.zeros((numSamples, self.n_channels, self.win_size * self.win_size))
 
-        for c in [0, 1, 2]:
+        for c in range(self.n_channels):
 
             patch_c = patch[c].ravel()
             patchIndices_c = patchIndices[c].ravel()
@@ -590,7 +600,7 @@ class cond_sampler_3d:
 
 
 
-def save_minmax_values(netname, X, n_channels=1):
+def save_minmax_values(netname, X, n_channels, path_folder):
     '''
     When X.npy is updated, this can be executed to also update the min/max
     values of the data (which is being used to cut off the values in the
@@ -599,10 +609,9 @@ def save_minmax_values(netname, X, n_channels=1):
     if n_channels == 1:
         minMaxVals = np.zeros((2, X.shape[-2], X.shape[-1]))
     else:
-        minMaxVals = np.zeros((2, 3, X.shape[-1], X.shape[-1]))
+        minMaxVals = np.zeros((2, n_channels, X.shape[-1], X.shape[-1]))
     minMaxVals[0] = np.min(X, axis=0)
     minMaxVals[1] = np.max(X, axis=0)
-    path_folder = './gaussians/'
     if not os.path.exists(path_folder):
         os.makedirs(path_folder)
-    np.save(path_folder+'{}_minMaxVals_nch{}'.format(netname, n_channels), minMaxVals)
+    np.save(path_folder+'{}_minMaxVals_{}ch'.format(netname, n_channels), minMaxVals)

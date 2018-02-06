@@ -21,11 +21,14 @@ def plot_map(x_test_im, predDiff, class_indx, classnames=None, save_path=None):
     
     plt.figure()
     plt.subplot(1, 3, 1)
-    plt.imshow(x_test_im, cmap='gray')
+    if len(imsize == 2):
+        plt.imshow(x_test_im, cmap='gray')
+    else:
+        plt.imshow(x_test_im)
     plt.title('original')
 
     plt.subplot(1, 3, 2)
-    p = predDiff.reshape((imsize[0], imsize[1], -1))[:, :, class_indx]
+    p = predDiff.reshape((imsize[x_test_im.ndim-2], imsize[x_test_im.ndim-1], -1))[:, :, class_indx]
     plt.imshow(p, cmap=cm.seismic, vmin=-np.max(np.abs(p)), vmax=np.max(np.abs(p)), interpolation='nearest')
     plt.title('weight of evidence')
 
@@ -33,7 +36,10 @@ def plot_map(x_test_im, predDiff, class_indx, classnames=None, save_path=None):
     plt.subplot(1, 3, 3)
     if tarClass is not None:
         plt.title('class: {}'.format(tarClass))
-    plt.imshow(x_test_im, cmap='gray', )
+    if len(imsize == 2):
+        plt.imshow(x_test_im, cmap='gray')
+    else:
+        plt.imshow(x_test_im)
     plt.imshow(p, cmap=cm.seismic, vmin=-np.max(np.abs(p)), vmax=np.max(np.abs(p)), interpolation='nearest', alpha=0.5)
 
     fig = plt.gcf()
@@ -51,7 +57,7 @@ def plot_map(x_test_im, predDiff, class_indx, classnames=None, save_path=None):
 def plot_all_maps(x_test_im, predDiff, classnames=None,  save_path=None):
 
     imsize = x_test_im.shape
-    prd = predDiff.reshape((imsize[0], imsize[1], -1))
+    prd = predDiff.reshape((imsize[x_test_im.ndim-2], imsize[x_test_im.ndim-1], -1))
 
     ncols = 3
     nrows = math.ceil((len(classnames) + 1) / ncols)

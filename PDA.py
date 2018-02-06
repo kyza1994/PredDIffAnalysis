@@ -9,7 +9,7 @@ import utils_visualise as utlV
 class PDA:
     def __init__(self, netname, net, samplerData, classnames=None, win_size=5,
                  padding_size=3, gpu=False, batch_size=32, overlapping=True, sample_style='conditional',
-                 num_samples=10, layer_numbers=[-1], lib='keras'):
+                 num_samples=10, layer_numbers=[-1], path_to_params=None, lib='keras'):
 
         self.netname = netname
         self.net = net
@@ -26,11 +26,14 @@ class PDA:
         self.image_dims = samplerData[0].shape[-2:]
         self.pda = None
         self.lib = lib
+        self.path_to_params = path_to_params
 
         if samplerData[0].ndim == 2:
             self.n_channels = 1
         elif samplerData[0].ndim == 3 and samplerData[0].shape[0] == 3:
             self.n_channels = 3
+        elif samplerData[0].ndim == 3 and samplerData[0].shape[0] == 2:
+            self.n_channels = 2
         else:
             raise ValueError('Bad input shape')
 
@@ -43,11 +46,12 @@ class PDA:
             if self.n_channels == 1:
                 self.sampler = utlS.cond_sampler(X=self.samplerData, win_size=self.win_size,
                                                 padding_size=self.padding_size, image_dims=self.image_dims,
-                                                netname=self.netname)
+                                                netname=self.netname, path_to_params=self.path_to_params)
             else:
-                self.sampler = utlS.cond_sampler_3d(X=self.samplerData, win_size=self.win_size,
+                self.sampler = utlS.cond_sampler_nch(X=self.samplerData, win_size=self.win_size,
                                                  padding_size=self.padding_size, image_dims=self.image_dims,
-                                                 netname=self.netname)
+                                                 netname=self.netname, n_channels=self.n_channels,
+                                                     path_to_params=self.path_to_params)
         elif sample_style == 'marginal':
             self.sampler = utlS.marg_sampler(self.samplerData)
 
