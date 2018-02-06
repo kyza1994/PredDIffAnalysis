@@ -4,7 +4,7 @@ from prediction_difference_analysis import PredDiffAnalyser
 import utils_classifiers as utlC
 import utils_sampling as utlS
 import utils_visualise as utlV
-
+import copy
 
 class PDA:
     def __init__(self, netname, net, samplerData, classnames=None, win_size=5,
@@ -13,7 +13,6 @@ class PDA:
 
         self.netname = netname
         self.net = net
-        self.samplerData = samplerData
         self.classnames = classnames
         self.layer_numbers = layer_numbers
         self.win_size = win_size
@@ -23,19 +22,22 @@ class PDA:
         self.overlapping = overlapping
         self.num_samples = num_samples
         self.sampler = None
-        self.image_dims = samplerData[0].shape[-2:]
         self.pda = None
         self.lib = lib
         self.path_to_params = path_to_params
 
         if samplerData[0].ndim == 2:
             self.n_channels = 1
-        elif samplerData[0].ndim == 3 and samplerData[0].shape[0] == 3:
-            self.n_channels = 3
-        elif samplerData[0].ndim == 3 and samplerData[0].shape[0] == 2:
-            self.n_channels = 2
+            self.samplerData = samplerData
+        elif samplerData[0].ndim == 3:
+            self.n_channels = samplerData[0].shape[2]
+            self.samplerData = samplerData.reshape(samplerData.shape[0], self.n_channels, samplerData.shape[1],
+                                                   samplerData.shape[2])
+
         else:
             raise ValueError('Bad input shape')
+
+        self.image_dims = self.samplerData[0].shape[-2:]
 
         utlC.set_mode(self.net, gpu=self.gpu, lib=self.lib)
         # target function (mapping input features to output probabilities)
@@ -62,8 +64,16 @@ class PDA:
         x    torchTensor
         Output:    weights of evidence
         """
+        self.x = copy.copy(x)
 
-        pda = PredDiffAnalyser(x, self.target_func, self.sampler, num_samples=self.num_samples,
+        if self.x.ndim == 2:
+            self.x = self.x
+        elif self.x.ndim == 3:
+            self.x = self.x.reshape(self.n_channels, self.x.shape[0], self.x.shape[1])
+        else:
+            raise ValueError('Bad input shape')
+
+        pda = PredDiffAnalyser(self.x, self.target_func, self.sampler, num_samples=self.num_samples,
                                batch_size=self.batch_size, n_channels=self.n_channels)
         pred_diffs = pda.get_rel_vect(win_size=self.win_size, overlap=self.overlapping)
         return pred_diffs

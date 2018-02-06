@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import time
+import math
 
 class PredDiffAnalyser:
     '''
@@ -104,8 +104,8 @@ class PredDiffAnalyser:
             
             windows = np.zeros((self.tests_per_batch, win_size*win_size*self.n_channels), dtype=int)
             win_idx = 0
-            for i in range(self.x.shape[self.x.ndim - 2]/win_size): # rows
-                for j in range(self.x.shape[self.x.ndim - 1]/win_size): # columns
+            for i in range(math.floor(self.x.shape[self.x.ndim - 2]/win_size)): # rows
+                for j in range(math.floor(self.x.shape[self.x.ndim - 1]/win_size)): # columns
                     # get the window which we want to simulate as unknown
                     if self.n_channels == 1:
                         window = all_feats[i*win_size:i*win_size+win_size, j*win_size:j*win_size+win_size].ravel()
