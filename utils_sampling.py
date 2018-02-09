@@ -29,14 +29,13 @@ class marg_sampler:
         self.X = X
         self.X = self.X.reshape(self.X.shape[0], -1)
 
-    def get_samples(self, sampleIndices, featVect=None, numSamples=10):
+    def get_samples(self, sampleIndices, numSamples=10):
         '''
         Draw marginal samples for the given indices
         Input:
                 sampleIndices   the indices in the image for which we want to
                                 draw samples; is expected to reflect the
                                 indices of the raveled (!) image
-                featVect        (irrelevant because we don't condition on it)
                 numSamples      the number of samples to return
         Output: 
                 samples         the marginal samples, in a matrix of size
@@ -51,7 +50,7 @@ class cond_sampler:
     using a multivariate Gaussian distribution
     '''
     
-    def __init__(self, X, win_size, padding_size, image_dims, netname, path_to_params, num_samples_fit=20000):
+    def __init__(self, X, win_size, padding_size, image_dims, num_samples_fit=20000):
         '''
         Sampler to conditionally sample pixel patches using a gaussian model
         Input: 
@@ -61,7 +60,6 @@ class cond_sampler:
                                 the window to condition the sampled values on
                 image_dim       the (2d) dimensions of the image, i.e.,
                                 (width, height)
-                netname         name of network
                 num_samples_fit number of samples used to fit the gaussian
         '''
         
@@ -71,68 +69,41 @@ class cond_sampler:
         self.image_dims = image_dims
         self.num_samples_fit = num_samples_fit
         self.X = X
-        self.netname = netname
-        #self.X = self.X.reshape(self.X.shape[0], -1)
-
-        if path_to_params is None:
-            self.path_folder = './gaussians/'
-        else:
-            self.path_folder = path_to_params
-
-        if not os.path.exists(self.path_folder):
-            os.makedirs(self.path_folder)      
         
         # the whole patch size whose pixel distribution we model with a gaussian
         self.patchSize = win_size + 2 * self.padding_size
         # the mean and covariance for the gaussian distribution on the whole patch
         self.meanVects, self.covMats = self._get_gauss_params()
-        
-        # the min/max values for the features seen in the data, so that we can cut off overfloating values
-        if not os.path.exists(self.path_folder+'{}_minMaxVals.npy'.format(self.netname)):
-            save_minmax_values(self.netname, self.X, 1, self.path_folder)
-        self.minMaxVals = np.load(self.path_folder+'{}_minMaxVals.npy'.format(self.netname))
+
+        self.minMaxVals = np.zeros((2, X.shape[-2], X.shape[-1]))
+
+        self.minMaxVals[0] = np.min(X, axis=0)
+        self.minMaxVals[1] = np.max(X, axis=0)
         
         self.location = None
         self.dotProdForMean = None
         self.cond_cov = None
+
 
     def _get_gauss_params(self):
         '''
         Returns the mean and covariance for the gaussian model on the whole
         patch (i.e., window to sample plus padding around it)
         '''
-        
-        means = np.zeros((self.patchSize * self.patchSize))
-        covs = np.zeros((self.patchSize * self.patchSize, self.patchSize * self.patchSize))
 
-        path_mean = self.path_folder+'{}_means{}_indep'.format(self.netname, self.patchSize)
-        path_cov = self.path_folder+'{}_covs{}_indep'.format(self.netname, self.patchSize)
-        
-        # check if  values are already precomputed and saved; otherwise do so first
-        if os.path.exists(path_mean+'.npy') and os.path.exists(path_cov+'.npy'):
-            
-            means = np.load(path_mean+'.npy')
-            covs = np.load(path_cov+'.npy')       
-            
-        else:
+        # get samples for fitting the distribution
+        patchesMat = np.empty((0, self.patchSize * self.patchSize), dtype=np.float)
+        for i in range(int(self.num_samples_fit/self.X.shape[0])+1):
+            # get a random (upper left) position of the patch
+            idx = [random.randint(0, self.image_dims[0]-self.patchSize),
+                   random.randint(0, self.image_dims[1]-self.patchSize)]
+            # get the patch from all the images in X, from the given channel
+            patch = self.X[:, idx[0]:idx[0]+self.patchSize, idx[1]:idx[1]+self.patchSize]
+            patchesMat = np.vstack((patchesMat, patch.reshape((self.X.shape[0], self.patchSize*self.patchSize))))
 
-            # get samples for fitting the distribution
-            patchesMat = np.empty((0, self.patchSize * self.patchSize), dtype=np.float)
-            for i in range(int(self.num_samples_fit/self.X.shape[0])+1):
-                # get a random (upper left) position of the patch
-                idx = [random.randint(0, self.image_dims[0]-self.patchSize),
-                       random.randint(0, self.image_dims[1]-self.patchSize)]
-                # get the patch from all the images in X, from the given channel
-                patch = self.X[:, idx[0]:idx[0]+self.patchSize, idx[1]:idx[1]+self.patchSize]
-                patchesMat = np.vstack((patchesMat, patch.reshape((self.X.shape[0], self.patchSize*self.patchSize))))
-
-            # compute the mean and covariance of the collected samples
-            means = np.mean(patchesMat, axis=0)
-            covs = np.cov(patchesMat.T)
-                
-            # save the mean and the covariance
-            np.save(path_mean, means)
-            np.save(path_cov, covs)
+        # compute the mean and covariance of the collected samples
+        means = np.mean(patchesMat, axis=0)
+        covs = np.cov(patchesMat.T)
             
         return means, covs
              
@@ -153,38 +124,24 @@ class cond_sampler:
         # split the mean vector into mu1 and mu2 (matching what we want to sample/condition on)
         mu1 = np.take(self.meanVects, inPatchIdx)
         mu2 = np.delete(self.meanVects, inPatchIdx)
-        
-        path_dotProdForMean = self.path_folder+'{}_cov{}_win{}_dotProdForMean_{}_{}'.format(self.netname, self.patchSize, self.win_size, inPatchIdx[0], inPatchIdx[-1])     
-        
-        # get the dot product for the mean (check if precomputed, otherwise do this first)
-        if not os.path.exists(path_dotProdForMean+'.npy'):
-            cov11 = self.covMats[inPatchIdx][:, inPatchIdx]
-            cov12 = np.delete(self.covMats[inPatchIdx, :], inPatchIdx, axis=1) if np.ndim(inPatchIdx > 1) \
-                else np.delete(self.covMats[inPatchIdx, :], inPatchIdx)
-            cov21 = np.delete(self.covMats[:, inPatchIdx], inPatchIdx, axis=0)
-            cov22 = np.delete(np.delete(self.covMats, inPatchIdx, axis=0), inPatchIdx, axis=1)
-            # compute the conditional mean and covariance
-            dotProdForMean = np.dot(cov12, scipy.linalg.inv(cov22))
-            np.save(path_dotProdForMean, dotProdForMean)
-        else:
-            dotProdForMean = np.load(path_dotProdForMean+'.npy')
-            
+
+        #cov11 = self.covMats[inPatchIdx][:, inPatchIdx]
+        cov12 = np.delete(self.covMats[inPatchIdx, :], inPatchIdx, axis=1) if np.ndim(inPatchIdx > 1) \
+            else np.delete(self.covMats[inPatchIdx, :], inPatchIdx)
+        #cov21 = np.delete(self.covMats[:, inPatchIdx], inPatchIdx, axis=0)
+        cov22 = np.delete(np.delete(self.covMats, inPatchIdx, axis=0), inPatchIdx, axis=1)
+        # compute the conditional mean and covariance
+        dotProdForMean = np.dot(cov12, scipy.linalg.inv(cov22))
+
         # with the dotproduct, we can now evaluate the conditional mean
         cond_mean = mu1 + np.dot(dotProdForMean, x2-mu2)
-        
-        path_condCov = self.path_folder+'{}_cov{}_win{}_cond_cov_{}_{}_indep'.format(self.netname, self.patchSize, self.win_size, inPatchIdx[0], inPatchIdx[-1])
-        
-        # get the conditional covariance
-        if not os.path.exists(path_condCov+'.npy'):        
-            cov11 = self.covMats[inPatchIdx][:, inPatchIdx]
-            cov12 = np.delete(self.covMats[inPatchIdx, :], inPatchIdx, axis=1) if np.ndim(inPatchIdx > 1) \
-                else np.delete(self.covMat[inPatchIdx, :], inPatchIdx)
-            cov21 = np.delete(self.covMats[:, inPatchIdx], inPatchIdx, axis=0)
-            cov22 = np.delete(np.delete(self.covMats, inPatchIdx, axis=0), inPatchIdx, axis=1)
-            cond_cov = cov11 - np.dot(np.dot(cov12, scipy.linalg.inv(cov22)), cov21)
-            np.save(path_condCov, cond_cov)                
-        else:
-            cond_cov = np.load(path_condCov+'.npy')
+
+        cov11 = self.covMats[inPatchIdx][:, inPatchIdx]
+        cov12 = np.delete(self.covMats[inPatchIdx, :], inPatchIdx, axis=1) if np.ndim(inPatchIdx > 1) \
+            else np.delete(self.covMat[inPatchIdx, :], inPatchIdx)
+        cov21 = np.delete(self.covMats[:, inPatchIdx], inPatchIdx, axis=0)
+        cov22 = np.delete(np.delete(self.covMats, inPatchIdx, axis=0), inPatchIdx, axis=1)
+        cond_cov = cov11 - np.dot(np.dot(cov12, scipy.linalg.inv(cov22)), cov21)
             
         return cond_mean, cond_cov
         
@@ -319,7 +276,7 @@ class cond_sampler_nch:
     using a multivariate Gaussian distribution
     '''
 
-    def __init__(self, X, win_size, padding_size, image_dims, netname, n_channels, path_to_params, num_samples_fit=20000):
+    def __init__(self, X, win_size, padding_size, image_dims, n_channels, num_samples_fit=20000):
         '''
         Sampler to conditionally sample pixel patches using a gaussian model
         Input:
@@ -329,7 +286,6 @@ class cond_sampler_nch:
                                 the window to condition the sampled values on
                 image_dim       the (2d) dimensions of the image, i.e.,
                                 (width, height)
-                netname         name of network
                 num_samples_fit number of samples used to fit the gaussian
         '''
 
@@ -339,27 +295,16 @@ class cond_sampler_nch:
         self.image_dims = image_dims
         self.num_samples_fit = num_samples_fit
         self.X = X
-        self.netname = netname
         self.n_channels = n_channels
-        # self.X = self.X.reshape(self.X.shape[0], -1)
 
-        if path_to_params is None:
-            self.path_folder = './gaussians/'
-        else:
-            self.path_folder = path_to_params
-
-        if not os.path.exists(self.path_folder):
-            os.makedirs(self.path_folder)
-
-            # the whole patch size whose pixel distribution we model with a gaussian
+        # the whole patch size whose pixel distribution we model with a gaussian
         self.patchSize = win_size + 2 * self.padding_size
         # the mean and covariance for the gaussian distribution on the whole patch
         self.meanVects, self.covMats = self._get_gauss_params()
 
-        # the min/max values for the features seen in the data, so that we can cut off overfloating values
-        if not os.path.exists(self.path_folder + '{}_minMaxVals_{}ch.npy'.format(self.netname, self.n_channels)):
-            save_minmax_values(self.netname, self.X, self.n_channels, self.path_folder)
-        self.minMaxVals = np.load(self.path_folder + '{}_minMaxVals_{}ch.npy'.format(self.netname, self.n_channels))
+        self.minMaxVals = np.zeros((2, n_channels, X.shape[-1], X.shape[-1]))
+        self.minMaxVals[0] = np.min(X, axis=0)
+        self.minMaxVals[1] = np.max(X, axis=0)
 
         self.location = None
         self.dotProdForMean = None
@@ -374,38 +319,24 @@ class cond_sampler_nch:
         means = np.zeros((self.n_channels, self.patchSize * self.patchSize))
         covs = np.zeros((self.n_channels, self.patchSize * self.patchSize, self.patchSize * self.patchSize))
 
-        path_mean = self.path_folder + '{}_means{}_indep_{}ch'.format(self.netname, self.patchSize, self.n_channels)
-        path_cov = self.path_folder + '{}_covs{}_indep_{}ch'.format(self.netname, self.patchSize, self.n_channels)
+        for c in range(self.n_channels):
+            # get samples for fitting the distribution
+            patchesMat = np.empty((0, self.patchSize * self.patchSize), dtype=np.float)
+            for i in range(int(self.num_samples_fit / self.X.shape[0]) + 1):
+                # get a random (upper left) position of the patch
+                idx = [random.randint(0, self.image_dims[0] - self.patchSize),
+                       random.randint(0, self.image_dims[1] - self.patchSize)]
+                # get the patch from all the images in X, from the given channel
+                patch = self.X[:, c, idx[0]:idx[0] + self.patchSize, idx[1]:idx[1] + self.patchSize]
+                patchesMat = np.vstack(
+                    (patchesMat, patch.reshape((self.X.shape[0], self.patchSize * self.patchSize))))
 
-        # check if  values are already precomputed and saved; otherwise do so first
-        if os.path.exists(path_mean + '.npy') and os.path.exists(path_cov + '.npy'):
-
-            means = np.load(path_mean + '.npy')
-            covs = np.load(path_cov + '.npy')
-
-        else:
-
-            for c in range(self.n_channels):
-                # get samples for fitting the distribution
-                patchesMat = np.empty((0, self.patchSize * self.patchSize), dtype=np.float)
-                for i in range(int(self.num_samples_fit / self.X.shape[0]) + 1):
-                    # get a random (upper left) position of the patch
-                    idx = [random.randint(0, self.image_dims[0] - self.patchSize),
-                           random.randint(0, self.image_dims[1] - self.patchSize)]
-                    # get the patch from all the images in X, from the given channel
-                    patch = self.X[:, c, idx[0]:idx[0] + self.patchSize, idx[1]:idx[1] + self.patchSize]
-                    patchesMat = np.vstack(
-                        (patchesMat, patch.reshape((self.X.shape[0], self.patchSize * self.patchSize))))
-
-                # compute the mean and covariance of the collected samples
-                means[c] = np.mean(patchesMat, axis=0)
-                covs[c] = np.cov(patchesMat.T)
-
-            # save the mean and the covariance
-            np.save(path_mean, means)
-            np.save(path_cov, covs)
+            # compute the mean and covariance of the collected samples
+            means[c] = np.mean(patchesMat, axis=0)
+            covs[c] = np.cov(patchesMat.T)
 
         return means, covs
+
 
     def _get_cond_params(self, surrPatch, inPatchIdx, channel):
         '''
@@ -424,47 +355,29 @@ class cond_sampler_nch:
         mu1 = np.take(self.meanVects[channel], inPatchIdx)
         mu2 = np.delete(self.meanVects[channel], inPatchIdx)
 
-        path_dotProdForMean = self.path_folder + '{}_cov{}_win{}_dotProdForMean_{}_{}_{}ch'.format(self.netname,
-                                                                                                 self.patchSize,
-                                                                                                 self.win_size,
-                                                                                                 inPatchIdx[0],
-                                                                                                 inPatchIdx[-1],
-                                                                                                 self.n_channels)
-
         # get the dot product for the mean (check if precomputed, otherwise do this first)
-        if not os.path.exists(path_dotProdForMean + '.npy'):
-            cov11 = self.covMats[channel][inPatchIdx][:, inPatchIdx]
-            cov12 = np.delete(self.covMats[channel][inPatchIdx, :], inPatchIdx, axis=1) if np.ndim(inPatchIdx > 1) \
-                else np.delete(self.covMats[channel][inPatchIdx, :], inPatchIdx)
-            cov21 = np.delete(self.covMats[channel][:, inPatchIdx], inPatchIdx, axis=0)
-            cov22 = np.delete(np.delete(self.covMats[channel], inPatchIdx, axis=0), inPatchIdx, axis=1)
-            # compute the conditional mean and covariance
-            dotProdForMean = np.dot(cov12, scipy.linalg.inv(cov22))
-            np.save(path_dotProdForMean, dotProdForMean)
-        else:
-            dotProdForMean = np.load(path_dotProdForMean + '.npy')
+
+        #cov11 = self.covMats[channel][inPatchIdx][:, inPatchIdx]
+        cov12 = np.delete(self.covMats[channel][inPatchIdx, :], inPatchIdx, axis=1) if np.ndim(inPatchIdx > 1) \
+            else np.delete(self.covMats[channel][inPatchIdx, :], inPatchIdx)
+        #cov21 = np.delete(self.covMats[channel][:, inPatchIdx], inPatchIdx, axis=0)
+        cov22 = np.delete(np.delete(self.covMats[channel], inPatchIdx, axis=0), inPatchIdx, axis=1)
+        # compute the conditional mean and covariance
+        dotProdForMean = np.dot(cov12, scipy.linalg.inv(cov22))
 
         # with the dotproduct, we can now evaluate the conditional mean
         cond_mean = mu1 + np.dot(dotProdForMean, x2 - mu2)
 
-        path_condCov = self.path_folder + '{}_cov{}_win{}_cond_cov_{}_{}_indep_{}ch'.format(self.netname, self.patchSize,
-                                                                                          self.win_size, inPatchIdx[0],
-                                                                                          inPatchIdx[-1],
-                                                                                          self.n_channels)
-
         # get the conditional covariance
-        if not os.path.exists(path_condCov + '.npy'):
-            cov11 = self.covMats[channel][inPatchIdx][:, inPatchIdx]
-            cov12 = np.delete(self.covMats[channel][inPatchIdx, :], inPatchIdx, axis=1) if np.ndim(inPatchIdx > 1) \
-                else np.delete(self.covMat[inPatchIdx, :], inPatchIdx)
-            cov21 = np.delete(self.covMats[channel][:, inPatchIdx], inPatchIdx, axis=0)
-            cov22 = np.delete(np.delete(self.covMats[channel], inPatchIdx, axis=0), inPatchIdx, axis=1)
-            cond_cov = cov11 - np.dot(np.dot(cov12, scipy.linalg.inv(cov22)), cov21)
-            np.save(path_condCov, cond_cov)
-        else:
-            cond_cov = np.load(path_condCov + '.npy')
+        cov11 = self.covMats[channel][inPatchIdx][:, inPatchIdx]
+        cov12 = np.delete(self.covMats[channel][inPatchIdx, :], inPatchIdx, axis=1) if np.ndim(inPatchIdx > 1) \
+            else np.delete(self.covMat[inPatchIdx, :], inPatchIdx)
+        cov21 = np.delete(self.covMats[channel][:, inPatchIdx], inPatchIdx, axis=0)
+        cov22 = np.delete(np.delete(self.covMats[channel], inPatchIdx, axis=0), inPatchIdx, axis=1)
+        cond_cov = cov11 - np.dot(np.dot(cov12, scipy.linalg.inv(cov22)), cov21)
 
         return cond_mean, cond_cov
+
 
     def _get_surr_patch(self, x, sampleIndices):
         '''
@@ -596,22 +509,3 @@ class cond_sampler_nch:
             samples[i][samples[i] > maxVals_sample] = maxVals_sample[samples[i] > maxVals_sample]
 
         return samples
-
-
-
-
-def save_minmax_values(netname, X, n_channels, path_folder):
-    '''
-    When X.npy is updated, this can be executed to also update the min/max
-    values of the data (which is being used to cut off the values in the
-    sampler so that we don't have overflowing values)
-    '''
-    if n_channels == 1:
-        minMaxVals = np.zeros((2, X.shape[-2], X.shape[-1]))
-    else:
-        minMaxVals = np.zeros((2, n_channels, X.shape[-1], X.shape[-1]))
-    minMaxVals[0] = np.min(X, axis=0)
-    minMaxVals[1] = np.max(X, axis=0)
-    if not os.path.exists(path_folder):
-        os.makedirs(path_folder)
-    np.save(path_folder+'{}_minMaxVals_{}ch'.format(netname, n_channels), minMaxVals)

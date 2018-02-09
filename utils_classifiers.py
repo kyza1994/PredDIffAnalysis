@@ -46,7 +46,8 @@ def forward_pass(net, x, layer_numbers=[-1], gpu=False, lib='keras', n_channels=
                                default is output layer (-1)
                 start          in which layer to start the forward pass
     '''
-        
+
+
     # feed forward the batch through the next
     if lib == 'torch':
 
@@ -88,12 +89,13 @@ def forward_pass(net, x, layer_numbers=[-1], gpu=False, lib='keras', n_channels=
 
 
         if len(layer_numbers) == 1 and layer_numbers[0] == -1:
-            returnVals = [net.predict(x)]
+
+            returnVals = [net.predict(x, batch_size=x.shape[0])]
         else:
-            returnVals = [Sequential(net.layers[:i+1]).predict(x) for i in layer_numbers]
+            returnVals = [Sequential(net.layers[:i+1]).predict(x, batch_size=x.shape[0]) for i in layer_numbers]
 
     else:
         print('Not supported lib')
-    
+
     return returnVals
 

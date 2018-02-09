@@ -5,6 +5,7 @@ import utils_classifiers as utlC
 import utils_sampling as utlS
 import utils_visualise as utlV
 import copy
+import time
 
 class PDA:
     def __init__(self, netname, net, samplerData, classnames=None, win_size=5,
@@ -47,15 +48,14 @@ class PDA:
         if sample_style == 'conditional':
             if self.n_channels == 1:
                 self.sampler = utlS.cond_sampler(X=self.samplerData, win_size=self.win_size,
-                                                padding_size=self.padding_size, image_dims=self.image_dims,
-                                                netname=self.netname, path_to_params=self.path_to_params)
+                                                 padding_size=self.padding_size, image_dims=self.image_dims)
             else:
                 self.sampler = utlS.cond_sampler_nch(X=self.samplerData, win_size=self.win_size,
-                                                 padding_size=self.padding_size, image_dims=self.image_dims,
-                                                 netname=self.netname, n_channels=self.n_channels,
-                                                     path_to_params=self.path_to_params)
+                                                     padding_size=self.padding_size, image_dims=self.image_dims,
+                                                     n_channels=self.n_channels)
         elif sample_style == 'marginal':
             self.sampler = utlS.marg_sampler(self.samplerData)
+
 
 
     def run(self, x):

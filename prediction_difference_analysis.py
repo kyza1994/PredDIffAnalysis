@@ -2,6 +2,7 @@
 
 import numpy as np
 import math
+import time
 
 class PredDiffAnalyser:
     '''
@@ -73,8 +74,9 @@ class PredDiffAnalyser:
             windows = np.zeros((self.tests_per_batch, win_size * win_size * self.n_channels), dtype=int)
             win_idx = 0
             for i in range(self.x.shape[self.x.ndim - 2] - win_size + 1): # rows
-
+                t1 = time.time()
                 for j in range(self.x.shape[self.x.ndim - 1] - win_size + 1): # columns
+
                     # get the window which we want to simulate as unknown
                     if self.n_channels == 1:
                         window = all_feats[i:i+win_size, j:j+win_size].ravel()
@@ -91,6 +93,9 @@ class PredDiffAnalyser:
                                 rel_vects[b][window[window < self.num_feats]] += pred_diffs[b][w]
                             counts[window[window < self.num_feats]] += 1
                         win_idx = 0
+
+                t2 = time.time()
+                print("Row {} in {:.4f}s".format(i, t2-t1))
                 
             # evaluate the rest that didn't fill last batch
             pred_diffs = self._get_rel_vect_subset(windows[:win_idx+1])
