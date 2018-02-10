@@ -29,7 +29,7 @@ class marg_sampler:
         self.X = X
         self.X = self.X.reshape(self.X.shape[0], -1)
 
-    def get_samples(self, sampleIndices, numSamples=10):
+    def get_samples(self, sampleIndices, featVect, numSamples=10):
         '''
         Draw marginal samples for the given indices
         Input:
