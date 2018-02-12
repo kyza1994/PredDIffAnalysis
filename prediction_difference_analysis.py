@@ -72,6 +72,7 @@ class PredDiffAnalyser:
         if overlap:
             
             windows = np.zeros((self.tests_per_batch, win_size * win_size * self.n_channels), dtype=int)
+
             win_idx = 0
             for i in range(self.x.shape[self.x.ndim - 2] - win_size + 1): # rows
                 t1 = time.time()
@@ -216,11 +217,14 @@ class PredDiffAnalyser:
                     tarVal_laplace = np.copy(self.true_tar_val[b])
                     avgP_laplace = np.copy(avgP)
 
-                    one_inds = list(set(np.concatenate((np.where(self.true_tar_val[b] == 1)[0], np.where(avgP == 1)[0]))))
-                    if len(one_inds) != 0:
-                        for ind in one_inds:
-                            tarVal_laplace[ind] = (self.true_tar_val[b][ind]*TRAINSIZE+1)/(TRAINSIZE+len(self.true_tar_val[b]))
-                            avgP_laplace[ind] = (avgP[ind]*TRAINSIZE+1)/(TRAINSIZE+len(self.true_tar_val[b]))
+                    #one_inds = list(set(np.concatenate((np.where(self.true_tar_val[b] == 1)[0], np.where(avgP == 1)[0]))))
+                    #if len(one_inds) != 0:
+                    #    for ind in one_inds:
+                    #        tarVal_laplace[ind] = (self.true_tar_val[b][ind]*TRAINSIZE+1)/(TRAINSIZE+len(self.true_tar_val[b]))
+                    #        avgP_laplace[ind] = (avgP[ind]*TRAINSIZE+1)/(TRAINSIZE+len(self.true_tar_val[b]))
+
+                    tarVal_laplace = (self.true_tar_val[b] * TRAINSIZE + 1) / (TRAINSIZE + len(self.true_tar_val[b]))
+                    avgP_laplace = (avgP * TRAINSIZE + 1) / (TRAINSIZE + len(self.true_tar_val[b]))
 
                     # calculate the odds for the true targets and  the targets with some features marginalised out
                     oddsTarVal = np.log2(tarVal_laplace/(1-tarVal_laplace))

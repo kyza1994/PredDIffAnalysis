@@ -246,17 +246,17 @@ class cond_sampler:
             cond_mean, cond_cov = self._get_cond_params(patch, patchIndices)
 
         # sample from the conditional distribution
-#        samples = np.random.multivariate_normal(cond_mean, cond_cov, numSamples)
+        samples = np.random.multivariate_normal(cond_mean, cond_cov, numSamples)
         # -- FASTER:
-        dimGauss = self.win_size*self.win_size
+        #dimGauss = self.win_size*self.win_size
         # --- (1) find real matrix A such that AA^T=Sigma ---
-        A = np.linalg.cholesky(cond_cov)
+        #A = np.linalg.cholesky(cond_cov)
         # --- (2) get (numSamples) samples from a standard normal ---
-        z = np.random.normal(size=numSamples*dimGauss).reshape(dimGauss, numSamples)
+        #z = np.random.normal(size=numSamples*dimGauss).reshape(dimGauss, numSamples)
         # --- (3) x=mu+Az ---
-        samples = cond_mean[np.newaxis, :] + np.dot(A, z).T
+        #samples = cond_mean[np.newaxis, :] + np.dot(A, z).T
 
-        samples = samples.reshape((numSamples, -1))            
+        #samples = samples.reshape((numSamples, -1))
             
         # get the min/max values for this particular sample    
         # (since the data is preprocessed these can be different for each pixel!)\
@@ -487,15 +487,15 @@ class cond_sampler_nch:
                 cond_mean, cond_cov = self._get_cond_params(patch_c, patchIndices_c, c)
 
                 # sample from the conditional distribution
-                #        samples = np.random.multivariate_normal(cond_mean, cond_cov, numSamples)
+            samples[:, c] = np.random.multivariate_normal(cond_mean, cond_cov, numSamples)
             # -- FASTER:
-            dimGauss = self.win_size * self.win_size
+            #dimGauss = self.win_size * self.win_size
             # --- (1) find real matrix A such that AA^T=Sigma ---
-            A = np.linalg.cholesky(cond_cov)
+            #A = np.linalg.cholesky(cond_cov)
             # --- (2) get (numSamples) samples from a standard normal ---
-            z = np.random.normal(size=numSamples * dimGauss).reshape(dimGauss, numSamples)
+            #z = np.random.normal(size=numSamples * dimGauss).reshape(dimGauss, numSamples)
             # --- (3) x=mu+Az ---
-            samples[:, c] = cond_mean[np.newaxis, :] + np.dot(A, z).T
+            #samples[:, c] = cond_mean[np.newaxis, :] + np.dot(A, z).T
 
         samples = samples.reshape((numSamples, -1))
 

@@ -8,11 +8,9 @@ import copy
 import time
 
 class PDA:
-    def __init__(self, netname, net, samplerData, classnames=None, win_size=5,
-                 padding_size=3, gpu=False, batch_size=32, overlapping=True, sample_style='conditional',
-                 num_samples=10, layer_numbers=[-1], path_to_params=None, lib='keras'):
+    def __init__(self, net, samplerData, win_size=5, padding_size=3, gpu=False, batch_size=32, overlapping=True,
+                 sample_style='conditional', num_samples=10, layer_numbers=[-1], lib='keras', classnames=None):
 
-        self.netname = netname
         self.net = net
         self.classnames = classnames
         self.layer_numbers = layer_numbers
@@ -25,7 +23,6 @@ class PDA:
         self.sampler = None
         self.pda = None
         self.lib = lib
-        self.path_to_params = path_to_params
 
         if samplerData[0].ndim == 2:
             self.n_channels = 1
